@@ -1,5 +1,7 @@
-const tweets = require('./tweet.js')
-const moment = require('moment')
+const tweets = require('./tweet')
+const dayjs = require('dayjs')
+var customParseFormat = require('dayjs/plugin/customParseFormat')
+dayjs.extend(customParseFormat)
 const matter = require('gray-matter')
 const fs = require('fs')
 
@@ -8,15 +10,17 @@ for (t of tweets) {
   
   if(
     t.tweet.in_reply_to_user_id_str === undefined && //ignore replies
-    !t.tweet.full_text.startsWith('RT @') && //ignore old style replies
-    t.tweet.entities.media //only include tweets with media.
+    !t.tweet.full_text.startsWith('RT @')// && //ignore old style replies
+    //t.tweet.entities.media //only include tweets with media.
     ) {
 
     //extra media
     let allMedia = []
-    for (media of t.tweet.entities.media) {
-      let file = media.media_url.substring(media.media_url.lastIndexOf('/') + 1)
-      allMedia.push({ url: '/images/notes/' + t.tweet.id + '-' + file })
+    if(t.tweet.entities.media) {
+      for (media of t.tweet.entities.media) {
+        let file = media.media_url.substring(media.media_url.lastIndexOf('/') + 1)
+        allMedia.push({ url: t.tweet.id + '-' + file })
+      }
     }
 
     //extract links
@@ -35,12 +39,17 @@ for (t of tweets) {
       }
     }
 
-    const photos = allMedia.length === 0 ? {} : { photo: allMedia }
+    const photos = allMedia.length === 0 ? {} : { photos: allMedia }
     const links = allLinks.length === 0 ? {} : { links: allLinks }
     const mentions = allMentions.length === 0 ? {} : { mentions: allMentions }
 
     //remove any links
-    let fileText = t.tweet.full_text.replace(/(?:https?|ftp):\/\/[\n\S]+/g, '')
+    let fileText = t.tweet.full_text//.replace(/(?:https?|ftp):\/\/[\n\S]+/g, '')
+    const regex = /(?:https?|ftp):\/\/[\n\S]+/g;
+    for (const link of allLinks) {
+      fileText = fileText.replace(regex, link);
+    }
+    fileText = fileText.replace(/(?:http:\/\/t\.co)[\n\S]+/g, '')
 
     //replace @mentions with linked mentioned
     for (mention of allMentions) {
@@ -48,13 +57,13 @@ for (t of tweets) {
     }
 
     let fileContent = matter.stringify(fileText, {
-      date: moment(t.tweet.created_at).format('YYYY-MM-DDTHH:MM:ssZ'),
+      date: dayjs(t.tweet.created_at).format(),
       ...photos,
       ...links,
       ...mentions,
-      syndicated: `https://twitter.com/roobottom/status/${t.tweet.id}`
+      url: `/${t.tweet.id}/`
     })
-    fs.writeFileSync(`${__dirname}/files/${moment(t.tweet.created_at).format('YYYY-MM-DD')}-${t.tweet.id}.md`, fileContent)
+    fs.writeFileSync(`${__dirname}/files/${dayjs(t.tweet.created_at).format('YYYY-MM-DD')}-${t.tweet.id}.md`, fileContent)
   }
 
   
